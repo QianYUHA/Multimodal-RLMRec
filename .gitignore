@@ -1,0 +1,72 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual environments
+rlmrec_env/
+.venv/
+venv/
+env/
+
+# =========================
+# Dataset
+# =========================
+data/*
+!data/mapper/
+!data/mapper/**
+!data/read_profile.py
+!data/README.md
+
+# Large Amazon metadata
+meta_Books.jsonl.gz*
+
+# =========================
+# Generated features
+# =========================
+*.pkl
+*.pickle
+*.npy
+*.npz
+
+# =========================
+# Images / downloaded data
+# =========================
+*.jpg
+*.jpeg
+*.webp
+
+# =========================
+# Model checkpoints
+# =========================
+*.pth
+*.pt
+*.ckpt
+*.bin
+
+# =========================
+# Logs / experiment outputs
+# =========================
+*.log
+wget-log
+
+encoder/log/
+encoder/checkpoint/
+results/
+checkpoints/
+outputs/
+
+# =========================
+# IDE
+# =========================
+.vscode/
+.idea/
+
+# =========================
+# OS
+# =========================
+.DS_Store
+Thumbs.db
+

@@ -1,171 +1,431 @@
-# RLMRec: Representation Learning with Large Language Models for Recommendation
+# Multimodal-RLMRec
 
-<img src='RLMRec_cover.png' />
+### Multimodal Representation Learning for Recommendation
 
- This is the PyTorch implementation by <a href='https://github.com/Re-bin'>@Re-bin</a> for RLMRec model proposed in this [paper](https://arxiv.org/abs/2310.15950):
+An extension of **RLMRec** that incorporates textual and visual item information into collaborative filtering through CLIP-based multimodal representations.
 
- >**Representation Learning with Large Language Models for Recommendation**  
- >Xubin Ren, Wei Wei, Lianghao Xia, Lixin Su, Suqi Cheng, Junfeng Wang, Dawei Yin, Chao Huang*\
- >*WWW2024*
+**Final Year Project · Nanyang Technological University**
 
+---
 
-\* denotes corresponding author
+## Overview
+
+Traditional collaborative filtering primarily relies on user-item interaction signals. However, items often contain rich semantic information in the form of text and images.
+
+This project investigates how **multimodal item representations** can be integrated into a collaborative filtering framework to improve recommendation performance.
+
+Building upon **RLMRec**, this project extends the LightGCN-based recommendation pipeline with:
+
+* **CLIP-based text representations**
+* **CLIP-based image representations**
+* **Modality-specific MLP projection**
+* **Multimodal fusion**
+* Integration with the **LightGCN+** recommendation framework
+
+### Architecture
+
 <p align="center">
-<img src="RLMRec.png" alt="RLMRec" />
+  <img src="assets/multimodal_pipeline.png" width="950">
 </p>
 
-In this paper, we propose a model-agnostic framework **RLMRec** that enhances existing recommenders with LLM-empowered representation learning. It proposes a paradigm that integrates representation learning with LLMs to capture intricate semantic aspects of user behaviors and preferences. RLMRec incorporates auxiliary textual signals, develops a user/item profiling paradigm empowered by LLMs, and aligns the semantic space of LLMs with the representation space of collaborative relational signals through a cross-view alignment framework.
+---
 
-## 📝 Environment
-You can run the following command to download the codes faster:
+## Key Contributions
+
+### 1. Multimodal Item Representation
+
+Instead of relying only on a single semantic representation, the model incorporates both textual and visual information:
+
+```text
+Text ──► CLIP Text Encoder ──► Text Projection ──┐
+                                                 │
+                                                 ▼
+                                           Multimodal Fusion
+                                                 │
+Image ─► CLIP Image Encoder ─► Image Projection ─┘
+                                                 │
+                                                 ▼
+                                      Multimodal Item Representation
+```
+
+### 2. Shared Recommendation Space
+
+Text and image embeddings are projected into the same recommendation embedding space using independent MLP projection networks.
+
+User semantic representations are also projected into the same space.
+
+### 3. Integration with Collaborative Filtering
+
+The resulting multimodal item representations are integrated into the LightGCN-based recommendation framework, allowing semantic information to complement collaborative filtering signals.
+
+---
+
+## Dataset
+
+Experiments are conducted on the **Amazon Books** dataset.
+
+### Dataset Statistics
+
+| Statistic                          |  Value |
+| ---------------------------------- | -----: |
+| Users                              | 11,000 |
+| Items                              |  9,332 |
+| Items matched with Amazon metadata |  8,467 |
+| Items with images                  |  7,425 |
+| Image coverage among matched items | 87.69% |
+
+The original RLMRec dataset provides user-item interactions and semantic profiles. Amazon Books metadata is additionally used to obtain book images and associate them with RLMRec item IDs.
+
+---
+
+## Multimodal Data Pipeline
+
+The preprocessing pipeline consists of four main stages:
+
+### 1. Item Mapping
+
+RLMRec item IDs are mapped to Amazon Books metadata and ASINs.
+
+```text
+RLMRec Item ID
+      │
+      ▼
+Amazon Metadata
+      │
+      ▼
+ASIN / Image URL
+```
+
+The mapping pipeline is implemented in:
+
+```text
+scripts/build_image_mapping.py
+```
+
+### 2. Image Collection
+
+Book cover images are downloaded from the Amazon metadata.
+
+```text
+ASIN / Image URL
+      │
+      ▼
+Book Cover Image
+```
+
+Implemented in:
+
+```text
+generation/image/download_images.py
+```
+
+### 3. CLIP Representation
+
+Both text and image information are encoded using CLIP.
+
+```text
+Item Text ───► CLIP Text Encoder ───► 512-d Text Embedding
+
+Book Image ──► CLIP Image Encoder ──► 512-d Image Embedding
+```
+
+The encoding scripts are:
+
+```text
+generation/text/encode_text.py
+generation/image/encode_image.py
+```
+
+### 4. Multimodal Projection and Fusion
+
+The generated representations are projected into the recommendation embedding space and fused before being incorporated into the recommendation model.
+
+```text
+Text Embedding
+      │
+      ▼
+Text Projection
+      │
+      ├──────────────┐
+      │              │
+      │              ▼
+      │        Fusion Module
+      │              ▲
+      │              │
+      └──────────────┤
+                     │
+Image Embedding      │
+      │              │
+      ▼              │
+Image Projection ────┘
+                     │
+                     ▼
+          Multimodal Item Representation
+```
+
+---
+
+## Model Architecture
+
+The current implementation extends the `LightGCN_plus` model from RLMRec.
+
+### User Side
+
+```text
+User ID
+   │
+   ▼
+User Embedding
+   │
+   ▼
+User Projection (MLP)
+   │
+   ▼
+User Representation
+```
+
+### Item Side
+
+```text
+                    ┌──► Text Projection ──┐
+Text Embedding ─────┘                      │
+                                           ▼
+                                      FusionMLP
+                                           │
+Image Embedding ───┐                      ▼
+                   └──► Image Projection ─┘
+                                           │
+                                           ▼
+                              Multimodal Item Representation
+```
+
+The main implementation can be found in:
+
+```text
+encoder/models/general_cf/lightgcn_plus.py
+```
+
+Projection and fusion modules are implemented in:
+
+```text
+encoder/models/modules/projection.py
+encoder/models/modules/fusion.py
+```
+
+---
+
+## Repository Structure
+
+```text
+Multimodal-RLMRec/
+│
+├── encoder/
+│   ├── config/
+│   │   └── ...
+│   │
+│   ├── models/
+│   │   ├── general_cf/
+│   │   │   └── lightgcn_plus.py
+│   │   │
+│   │   └── modules/
+│   │       ├── projection.py
+│   │       └── fusion.py
+│   │
+│   └── ...
+│
+├── generation/
+│   ├── image/
+│   │   ├── download_images.py
+│   │   └── encode_image.py
+│   │
+│   └── text/
+│       └── encode_text.py
+│
+├── scripts/
+│   └── build_image_mapping.py
+│
+├── tools/
+│   └── build_amazon7425.py
+│
+├── data/
+│   └── ...
+│
+├── iid_to_image.json
+├── .gitignore
+└── README.md
+```
+
+Large datasets, downloaded images, generated embeddings, model checkpoints, and virtual environments are intentionally excluded from the repository.
+
+---
+
+## Getting Started
+
+### Environment
+
+The project was developed and tested with:
+
+* Python 3.9
+* PyTorch
+* CUDA
+* CLIP
+* NumPy
+* SciPy
+
+A CUDA-enabled GPU is recommended for embedding generation and model training.
+
+### Clone the Repository
+
 ```bash
-git clone --depth 1 https://github.com/HKUDS/RLMRec.git
+git clone <YOUR_REPOSITORY>
+cd Multimodal-RLMRec
 ```
 
-Then run the following commands to create a conda environment:
+### Data Preparation
+
+The datasets and large-scale Amazon metadata are not included in this repository.
+
+After obtaining the required data, the multimodal preprocessing pipeline can be executed using the provided scripts.
+
+### Build Image Mapping
 
 ```bash
-conda create -y -n rlmrec python=3.9
-conda activate rlmrec
-pip install torch==1.13.1+cu116 torchvision==0.14.1+cu116 torchaudio==0.13.1 --extra-index-url https://download.pytorch.org/whl/cu116
-pip install torch-scatter -f https://data.pyg.org/whl/torch-1.13.1+cu117.html
-pip install torch-sparse -f https://data.pyg.org/whl/torch-1.13.1+cu117.html
-pip install pyyaml tqdm
+python scripts/build_image_mapping.py
 ```
 
-😉 The codes are developed based on the [SSLRec](https://github.com/HKUDS/SSLRec) framework.
+### Download Images
 
-## 📚 Text-attributed Recommendation Dataset
-
-We utilized three public datasets to evaluate RLMRec:  *Amazon-book, Yelp,* and *Steam*.
-
-Each user and item has a generated text description.
-
-First of all, please **download the data** by running following commands.
- ```
- cd data/
- wget https://archive.org/download/rlmrec_data/data.zip
- unzip data.zip
- ```
-
-You can also download our data from the [[Google Drive](https://drive.google.com/file/d/1PzePFsBcYofG1MV2FisFLBM2lMytbMdW/view?usp=sharing)].
-
-
-Each dataset consists of a training set, a validation set, and a test set. During the training process, we utilize the validation set to determine when to stop the training in order to prevent overfitting.
-```
-- amazon(yelp/steam)
-|--- trn_mat.pkl    # training set (sparse matrix)
-|--- val_mat.pkl    # validation set (sparse matrix)
-|--- tst_mat.pkl    # test set (sparse matrix)
-|--- usr_prf.pkl    # text description of users
-|--- itm_prf.pkl    # text description of items
-|--- usr_emb_np.pkl # user text embeddings
-|--- itm_emb_np.pkl # item text embeddings
+```bash
+python generation/image/download_images.py
 ```
 
-### User/Item Profile
-- Each profile is a **high quality text description** of a user/item.
-- Both user and item profiles are generated from **Large Language Models** from raw text data.
-- The `user profile` (in `usr_prf.pkl`) shows the particular types of items that the user tends to prefer. 
-- The `item profile` (in `itm_prf.pkl`) articulates the specific types of users that the item is apt to attract. 
+### Generate Image Embeddings
 
-😊 You can run the code `python data/read_profile.py` as an example to read the profiles as follows.
-```
-$ python data/read_profile.py
-User 123's Profile:
-
-PROFILE: Based on the kinds of books the user has purchased and reviewed, they are likely to enjoy historical
-fiction with strong character development, exploration of family dynamics, and thought-provoking themes. The user 
-also seems to enjoy slower-paced plots that delve deep into various perspectives. Books with unexpected twists, 
-connections between unrelated characters, and beautifully descriptive language could also be a good fit for 
-this reader.
-
-REASONING: The user has purchased several historical fiction novels such as 'Prayers for Sale' and 'Fall of 
-Giants' which indicate an interest in exploring the past. Furthermore, the books they have reviewed, like 'Help 
-for the Haunted' and 'The Leftovers,' involve complex family relationships. Additionally, the user appreciates 
-thought-provoking themes and character-driven narratives as shown in their review of 'The Signature of All 
-Things' and 'The Leftovers.' The user also enjoys descriptive language, as demonstrated in their review of 
-'Prayers for Sale.'
+```bash
+python generation/image/encode_image.py
 ```
 
-### Semantic Representation
-- Each user and item has a semantic embedding encoded from its own profile using **Text Embedding Models**.
-- The encoded semantic embeddings are stored in `usr_emb_np.pkl` and `itm_emb_np.pkl`.
+### Generate Text Embeddings
 
-### Mapping to Original Data
-
-The original data of our dataset can be found from following links (thanks to their work):
-- Yelp: https://www.yelp.com/dataset
-- Amazon-book: https://cseweb.ucsd.edu/~jmcauley/datasets/amazon/links.html
-- Steam: https://github.com/kang205/SASRec
-
-We provide the **mapping dictionary** in JSON format in the `data/mapper` folder to map the `user/item ID` in our processed data to the `original identification` in original data (e.g., asin for items in Amazon-book).
-
-🤗 Welcome to use our processed data to improve your research!
-
-## 🚀 Examples to run the codes
-
-The command to evaluate the backbone models and RLMRec is as follows. 
-
-  - Backbone 
-
-    ```python encoder/train_encoder.py --model {model_name} --dataset {dataset} --cuda 0```   
-
-  - RLMRec-Con **(Constrastive Alignment)**:
-
-    ```python encoder/train_encoder.py --model {model_name}_plus --dataset {dataset} --cuda 0```
-
-  - RLMRec-Gen **(Generative Alignment)**:
-
-    ```python encoder/train_encoder.py --model {model_name}_gene --dataset {dataset} --cuda 0```
-
-Supported models/datasets:
-
-* model_name:  `gccf`, `lightgcn`, `sgl`, `simgcl`, `dccf`, `autocf`
-* dataset: `amazon`, `yelp`, `steam`
-
-Hypeparameters:
-
-* The hyperparameters of each model are stored in `encoder/config/modelconf` (obtained by grid-search).
-
- **For advanced usage of arguments, run the code with --help argument.**
-
-## 🔮 Profile Generation and Semantic Representation Encoding
-Here we provide some examples with *Yelp* Data to generate user/item profiles and semantic representations.
-
-Firstly, we need to complete the following three steps.
-- Install the openai library `pip install openai`
-- Prepare your **OpenAI API Key**
-- Enter your key on `Line 5` of these files: `generation\{item/user/emb}\generate_{profile/emb}.py`.
-
-Then, here are the commands to generate the desired output with examples:
-
-  - **Item Profile Generation**:
-
-    ```python generation/item/generate_profile.py```   
-
-  - **User Profile Generation**:
-
-    ```python generation/user/generate_profile.py```
-
-  - **Semantic Representation**:
-
-    ```python generation/emb/generate_emb.py```
-
-For semantic representation encoding, you can also try other text embedding models like [Instructor](https://github.com/xlang-ai/instructor-embedding) or [Contriever](https://github.com/facebookresearch/contriever).
-
-😀 The **instructions** we designed are saved in the `{user/item}_system_prompt.txt` files and also the `generation/instruction` folder. You can modify them according to your requirements and generate the desired output!
-
-## 🌟 Citation
-If you find this work is helpful to your research, please consider citing our paper:
-```bibtex
-@inproceedings{ren2024representation,
-  title={Representation learning with large language models for recommendation},
-  author={Ren, Xubin and Wei, Wei and Xia, Lianghao and Su, Lixin and Cheng, Suqi and Wang, Junfeng and Yin, Dawei and Huang, Chao},
-  booktitle={Proceedings of the ACM on Web Conference 2024},
-  pages={3464--3475},
-  year={2024}
-}
+```bash
+python generation/text/encode_text.py
 ```
 
-**Thanks for your interest in our work!**
+The generated embeddings are intentionally excluded from GitHub due to their file size.
+
+---
+
+## Experiments
+
+The experimental goal is to investigate whether multimodal item information can complement collaborative filtering representations.
+
+The current comparison framework includes:
+
+| Model              | Text | Image | Multimodal Fusion |
+| ------------------ | :--: | :---: | :---------------: |
+| LightGCN           |   ✗  |   ✗   |         ✗         |
+| RLMRec / LightGCN+ |   ✓  |   ✗   |         ✗         |
+| Multimodal-RLMRec  |   ✓  |   ✓   |         ✓         |
+
+Evaluation will focus on standard recommendation metrics such as:
+
+* Recall@K
+* NDCG@K
+
+Detailed experimental results will be added as the model development and evaluation are finalized.
+
+---
+
+## Current Progress
+
+### Completed
+
+* [x] Reproduced the RLMRec LightGCN baseline
+* [x] Processed the Amazon Books dataset
+* [x] Matched RLMRec items with Amazon metadata
+* [x] Built item-to-image mappings
+* [x] Downloaded book cover images
+* [x] Generated CLIP image embeddings
+* [x] Generated CLIP text embeddings
+* [x] Implemented modality-specific projection networks
+* [x] Implemented multimodal fusion
+* [x] Integrated multimodal representations into `LightGCN_plus`
+
+### In Progress
+
+* [ ] Improve multimodal fusion strategies
+* [ ] Investigate semantic alignment objectives
+* [ ] Evaluate different projection architectures
+* [ ] Conduct systematic ablation studies
+* [ ] Compare multimodal and non-multimodal recommendation models
+* [ ] Finalize recommendation experiments
+
+---
+
+## Relationship to RLMRec
+
+This project is based on the original **RLMRec** framework and extends its recommendation pipeline for multimodal representation learning.
+
+The main extensions developed in this project include:
+
+```text
+Original RLMRec
+      │
+      ▼
+Semantic Representation
+      │
+      ▼
+LightGCN-based Recommendation
+
+
+This Project
+      │
+      ├── CLIP Text Representation
+      │
+      ├── CLIP Image Representation
+      │
+      ├── Modality-specific Projection
+      │
+      └── Multimodal Fusion
+               │
+               ▼
+       LightGCN-based Recommendation
+```
+
+The original RLMRec implementation and research framework are developed by the RLMRec authors.
+
+---
+
+## Future Work
+
+The next stage of the project will investigate:
+
+* More expressive multimodal fusion mechanisms
+* Semantic alignment between multimodal and collaborative representations
+* Contrastive or distribution-level alignment objectives
+* Ablation studies for different modalities
+* Evaluation of the impact of visual information on recommendation quality
+
+---
+
+## Acknowledgements
+
+This project is based on:
+
+**RLMRec: Representation Learning with Large Language Models for Recommendation**
+
+The original implementation is provided by the RLMRec authors.
+
+This repository contains modifications and extensions developed as part of a Final Year Project at Nanyang Technological University.
+
+---
+
+## Author
+
+**Shu Xuanyu**
+
+Final Year Project
+Nanyang Technological University
+
+**Research Interests:**
+Recommender Systems · Multimodal Learning · Large Language Models · Computer Vision · Machine Learning

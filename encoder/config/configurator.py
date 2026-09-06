@@ -53,19 +53,39 @@ def parse_configure(model=None, dataset=None):
         usrprf_embeds_path = "./data/{}/usr_emb_np.pkl".format(configs['data']['name'])
         itmprf_embeds_path = "./data/{}/itm_emb_np.pkl".format(configs['data']['name'])
         
-        item_text_path = "./generation/features/item_text_clip.pkl"
-        item_image_path = "./generation/features/item_image_clip.pkl"
-
         with open(usrprf_embeds_path, 'rb') as f:
             configs['usrprf_embeds'] = pickle.load(f)
         with open(itmprf_embeds_path, 'rb') as f:
             configs['itmprf_embeds'] = pickle.load(f)
 
-        with open(item_text_path, "rb") as f:
-            configs["item_text_embeds"] = pickle.load(f)
-        with open(item_image_path, "rb") as f:
-            configs["item_image_embeds"] = pickle.load(f)
+        # ==========================
+        # CLIP text / image embeddings
+        # ==========================
 
+        if configs['data']['name'] == 'amazon7425':
+
+            item_text_path = "./data/amazon7425/item_text_clip.pkl"
+            item_image_path = "./data/amazon7425/item_image_clip.pkl"
+
+        else:
+
+            item_text_path = "./generation/features/item_text_clip.pkl"
+            item_image_path = "./generation/features/item_image_clip.pkl"
+
+
+        # CLIP text
+        if os.path.exists(item_text_path):
+
+            with open(item_text_path, "rb") as f:
+                configs["item_text_embeds"] = pickle.load(f)
+
+
+        # CLIP image
+        if os.path.exists(item_image_path):
+
+            with open(item_image_path, "rb") as f:
+                configs["item_image_embeds"] = pickle.load(f)
+                
         return configs
 
 configs = parse_configure()

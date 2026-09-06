@@ -5,13 +5,14 @@ from config.configurator import configs
 from models.loss_utils import cal_bpr_loss, reg_params, cal_infonce_loss
 from models.base_model import BaseModel
 from models.model_utils import SpAdjEdgeDrop
+from models.modules.projection import ProjectionMLP
 
 init = nn.init.xavier_uniform_
 uniformInit = nn.init.uniform
 
-class LightGCN_plus(BaseModel):
+class LightGCN_plus_clip_text(BaseModel):
     def __init__(self, data_handler):
-        super(LightGCN_plus, self).__init__(data_handler)
+        super(LightGCN_plus_clip_text, self).__init__(data_handler)
         self.adj = data_handler.torch_adj
         self.keep_rate = configs['model']['keep_rate']
         self.user_embeds = nn.Parameter(init(t.empty(self.user_num, self.embedding_size)))
@@ -26,21 +27,48 @@ class LightGCN_plus(BaseModel):
         self.kd_weight = self.hyper_config['kd_weight']
         self.kd_temperature = self.hyper_config['kd_temperature']
 
-        # semantic-embeddings
+        # ==========================
+        # User semantic embedding
+        # ==========================
+
         self.usrprf_embeds = t.tensor(configs['usrprf_embeds']).float().cuda()
-        self.itmprf_embeds = t.tensor(configs['itmprf_embeds']).float().cuda()
-        self.mlp = nn.Sequential(
-            nn.Linear(self.usrprf_embeds.shape[1], (self.usrprf_embeds.shape[1] + self.embedding_size) // 2),
+
+        self.user_mlp = nn.Sequential(
+            nn.Linear(
+               self.usrprf_embeds.shape[1],
+               (self.usrprf_embeds.shape[1] + self.embedding_size) // 2
+            ),
             nn.LeakyReLU(),
-            nn.Linear((self.usrprf_embeds.shape[1] + self.embedding_size) // 2, self.embedding_size)
+            nn.Linear(
+               (self.usrprf_embeds.shape[1] + self.embedding_size) // 2,
+               self.embedding_size
+            )
+        )
+
+        # ==========================
+        # CLIP Text embedding
+        # ==========================
+
+        self.item_text_embeds = t.tensor(configs['item_text_embeds']).float().cuda()
+
+        self.text_projection = ProjectionMLP(
+              input_dim=self.item_text_embeds.shape[1],
+               output_dim=self.embedding_size
         )
 
         self._init_weight()
 
     def _init_weight(self):
-        for m in self.mlp:
-            if isinstance(m, nn.Linear):
-                init(m.weight)
+
+        for module in [
+            self.user_mlp,
+            self.text_projection,
+        ]:
+
+            for m in module.modules():
+
+                if isinstance(m, nn.Linear):
+                    init(m.weight)
     
     def _propagate(self, adj, embeds):
         return t.spmm(adj, embeds)
@@ -74,8 +102,13 @@ class LightGCN_plus(BaseModel):
 
         anc_embeds, pos_embeds, neg_embeds = self._pick_embeds(user_embeds, item_embeds, batch_data)
 
-        usrprf_embeds = self.mlp(self.usrprf_embeds)
-        itmprf_embeds = self.mlp(self.itmprf_embeds)
+        usrprf_embeds = self.user_mlp(
+            self.usrprf_embeds
+        )
+
+        itmprf_embeds = self.text_projection(
+            self.item_text_embeds
+        )
         ancprf_embeds, posprf_embeds, negprf_embeds = self._pick_embeds(usrprf_embeds, itmprf_embeds, batch_data)
 
         bpr_loss = cal_bpr_loss(anc_embeds, pos_embeds, neg_embeds) / anc_embeds.shape[0]

@@ -5,13 +5,15 @@ from config.configurator import configs
 from models.loss_utils import cal_bpr_loss, reg_params, cal_infonce_loss
 from models.base_model import BaseModel
 from models.model_utils import SpAdjEdgeDrop
+from models.modules.projection import ProjectionMLP
+from models.modules.fusion import FusionMLP
 
 init = nn.init.xavier_uniform_
 uniformInit = nn.init.uniform
 
-class LightGCN_plus(BaseModel):
+class LightGCN_plus_multimodal(BaseModel):
     def __init__(self, data_handler):
-        super(LightGCN_plus, self).__init__(data_handler)
+        super(LightGCN_plus_multimodal, self).__init__(data_handler)
         self.adj = data_handler.torch_adj
         self.keep_rate = configs['model']['keep_rate']
         self.user_embeds = nn.Parameter(init(t.empty(self.user_num, self.embedding_size)))
@@ -28,19 +30,48 @@ class LightGCN_plus(BaseModel):
 
         # semantic-embeddings
         self.usrprf_embeds = t.tensor(configs['usrprf_embeds']).float().cuda()
-        self.itmprf_embeds = t.tensor(configs['itmprf_embeds']).float().cuda()
-        self.mlp = nn.Sequential(
-            nn.Linear(self.usrprf_embeds.shape[1], (self.usrprf_embeds.shape[1] + self.embedding_size) // 2),
-            nn.LeakyReLU(),
-            nn.Linear((self.usrprf_embeds.shape[1] + self.embedding_size) // 2, self.embedding_size)
+
+        #item semantic-embeddings
+        self.item_text_embeds = t.tensor(configs["item_text_embeds"]).float().cuda()
+        self.item_image_embeds = t.tensor(configs["item_image_embeds"]).float().cuda()
+
+        #projection
+        self.user_projection = ProjectionMLP(
+            input_dim=self.usrprf_embeds.shape[1],
+            output_dim=self.embedding_size
+        )
+
+        self.text_projection = ProjectionMLP(
+            input_dim=self.item_text_embeds.shape[1],
+            output_dim=self.embedding_size
+        )
+
+        self.image_projection = ProjectionMLP(
+            input_dim=self.item_image_embeds.shape[1],
+            output_dim=self.embedding_size
+        )
+
+        #fusion
+        self.fusion = FusionMLP(
+            embed_dim=self.embedding_size
         )
 
         self._init_weight()
 
     def _init_weight(self):
-        for m in self.mlp:
-            if isinstance(m, nn.Linear):
-                init(m.weight)
+
+        for module in [
+            self.user_projection,
+            self.text_projection,
+            self.image_projection,
+            self.fusion,
+        ]:
+
+            for m in module.modules():
+
+                if isinstance(m, nn.Linear):
+
+                    init(m.weight)
     
     def _propagate(self, adj, embeds):
         return t.spmm(adj, embeds)
@@ -74,8 +105,16 @@ class LightGCN_plus(BaseModel):
 
         anc_embeds, pos_embeds, neg_embeds = self._pick_embeds(user_embeds, item_embeds, batch_data)
 
-        usrprf_embeds = self.mlp(self.usrprf_embeds)
-        itmprf_embeds = self.mlp(self.itmprf_embeds)
+        usrprf_embeds = self.user_projection(self.usrprf_embeds)
+
+        text_item_embeds = self.text_projection(self.item_text_embeds)
+
+        image_item_embeds = self.image_projection(self.item_image_embeds)
+
+        itmprf_embeds = self.fusion(
+            text_item_embeds,
+            image_item_embeds
+        )
         ancprf_embeds, posprf_embeds, negprf_embeds = self._pick_embeds(usrprf_embeds, itmprf_embeds, batch_data)
 
         bpr_loss = cal_bpr_loss(anc_embeds, pos_embeds, neg_embeds) / anc_embeds.shape[0]

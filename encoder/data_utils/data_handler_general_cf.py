@@ -11,6 +11,8 @@ class DataHandlerGeneralCF:
     def __init__(self):
         if configs['data']['name'] == 'amazon':
             predir = './data/amazon/'
+        elif configs['data']['name'] == 'amazon7425':
+            predir = './data/amazon7425/'
         elif configs['data']['name'] == 'yelp':
             predir = './data/yelp/'
         elif configs['data']['name'] == 'steam':
